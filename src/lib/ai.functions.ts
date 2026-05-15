@@ -169,7 +169,7 @@ Return JSON:
 }`,
       json: true,
     });
-    return parseJSON<PortfolioInsight>(raw);
+    return parseJSON<StockAnalysis>(raw);
   });
 
 // ── Portfolio insight ───────────────────────────────────────────────────────
