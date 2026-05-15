@@ -42,10 +42,46 @@ async function callAI(opts: {
 
 function parseJSON<T>(raw: string): T {
   const cleaned = raw.replace(/```json|```/g, "").trim();
-  // try to grab first JSON object
   const match = cleaned.match(/\{[\s\S]*\}/);
   return JSON.parse(match ? match[0] : cleaned) as T;
 }
+
+export type StockAnalysis = {
+  verdict: string;
+  score: number;
+  confidence: string;
+  fair_value_estimate: number;
+  summary: string;
+  thesis: string;
+  bear_case: string;
+  key_metrics: Array<{ label: string; value: string; note: string }>;
+  watch_for: Array<{ signal: string; why: string }>;
+  watch_out_for: Array<{ risk: string; why: string }>;
+  competitive_moat: string;
+  lesson: string;
+};
+
+export type PortfolioInsight = {
+  diversification_score: number;
+  concentration_risk: string;
+  sector_skew: string;
+  strengths: string[];
+  weaknesses: string[];
+  actions: Array<{ action: string; rationale: string }>;
+  summary: string;
+};
+
+export type NewsSentimentResult = {
+  sentiment: string;
+  score: number;
+  headline: string;
+  narrative: string;
+  positives: Array<{ point: string; impact: string }>;
+  negatives: Array<{ point: string; impact: string }>;
+  what_it_means: string;
+  watch_for: string[];
+  glossary: { term: string; definition: string };
+};
 
 // ── Stock price (Yahoo Finance, server-side avoids CORS) ────────────────────
 export const fetchStockQuote = createServerFn({ method: "POST" })
