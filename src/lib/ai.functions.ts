@@ -207,7 +207,7 @@ Return JSON:
 }`,
       json: true,
     });
-    return parseJSON<StockAnalysis>(raw);
+    return parseJSON<PortfolioInsight>(raw);
   });
 
 // ── News sentiment ──────────────────────────────────────────────────────────
