@@ -169,7 +169,7 @@ Return JSON:
 }`,
       json: true,
     });
-    return parseJSON<Record<string, unknown>>(raw);
+    return parseJSON<PortfolioInsight>(raw);
   });
 
 // ── Portfolio insight ───────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ Return JSON:
 }`,
       json: true,
     });
-    return parseJSON<Record<string, unknown>>(raw);
+    return parseJSON<StockAnalysis>(raw);
   });
 
 // ── News sentiment ──────────────────────────────────────────────────────────
@@ -245,5 +245,5 @@ Return JSON:
 }`,
       json: true,
     });
-    return parseJSON<Record<string, unknown>>(raw);
+    return parseJSON<StockAnalysis>(raw);
   });
