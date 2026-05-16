@@ -63,17 +63,17 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.16 0.02 270);
-  --foreground: oklch(0.98 0.005 250);
-  --brand: oklch(0.7 0.18 295);
-  --brand-2: oklch(0.68 0.16 250);
-  --gradient-brand: linear-gradient(135deg, oklch(0.7 0.18 295), oklch(0.68 0.16 250));
-  --surface: oklch(0.21 0.025 270);
-  --surface-2: oklch(0.25 0.028 270);
-  --success: oklch(0.72 0.17 150);
-  --danger: oklch(0.68 0.21 25);
-  --warning: oklch(0.78 0.16 75);
-  --shadow-elegant: 0 10px 40px -10px oklch(0.1 0.05 270 / 0.6);
+  --background: oklch(0.22 0.022 270);
+  --foreground: oklch(0.985 0.005 250);
+  --brand: oklch(0.74 0.17 295);
+  --brand-2: oklch(0.72 0.15 250);
+  --gradient-brand: linear-gradient(135deg, oklch(0.74 0.17 295), oklch(0.72 0.15 250));
+  --surface: oklch(0.28 0.025 270);
+  --surface-2: oklch(0.33 0.028 270);
+  --success: oklch(0.76 0.16 150);
+  --danger: oklch(0.7 0.2 25);
+  --warning: oklch(0.82 0.15 75);
+  --shadow-elegant: 0 10px 40px -10px oklch(0.08 0.04 270 / 0.5);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
