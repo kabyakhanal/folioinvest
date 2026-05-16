@@ -74,10 +74,10 @@
   --danger: oklch(0.7 0.2 25);
   --warning: oklch(0.82 0.15 75);
   --shadow-elegant: 0 10px 40px -10px oklch(0.08 0.04 270 / 0.5);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(0.28 0.025 270);
+  --card-foreground: oklch(0.985 0.005 250);
+  --popover: oklch(0.28 0.025 270);
+  --popover-foreground: oklch(0.985 0.005 250);
   --primary: oklch(0.74 0.17 295);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.3 0.025 270);
