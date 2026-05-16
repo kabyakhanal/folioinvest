@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeStock, fetchStockFundamentals, fetchStockQuote, type StockAnalysis } from "@/lib/ai.functions";
+import { PriceHistoryChart } from "./PriceHistoryChart";
 import { toast } from "sonner";
 
 const SECTORS = ["Technology", "Healthcare", "Finance", "Consumer", "Energy", "Industrials", "Real Estate", "Utilities", "Materials", "Communication"];
@@ -133,6 +134,8 @@ export function StockAnalyzer() {
               <div className="h-full bg-gradient-to-r from-[var(--brand-2)] to-[var(--brand)] transition-all duration-700" style={{ width: `${(result.score / 10) * 100}%` }} />
             </div>
           </Card>
+
+          <PriceHistoryChart ticker={ticker} />
 
           {result.key_metrics?.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
