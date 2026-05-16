@@ -108,6 +108,40 @@ export const fetchStockQuote = createServerFn({ method: "POST" })
     }
   });
 
+// ── Stock historical prices (Yahoo Finance) ─────────────────────────────────
+export const fetchStockHistory = createServerFn({ method: "POST" })
+  .inputValidator((input: { ticker: string; range?: string }) => ({
+    ticker: String(input.ticker).toUpperCase().slice(0, 10),
+    range: ["1mo", "3mo", "6mo", "1y", "5y", "max"].includes(input.range ?? "")
+      ? (input.range as string)
+      : "1y",
+  }))
+  .handler(async ({ data }) => {
+    try {
+      const interval =
+        data.range === "1mo" ? "1d" :
+        data.range === "3mo" ? "1d" :
+        data.range === "6mo" ? "1d" :
+        data.range === "1y"  ? "1d" :
+        data.range === "5y"  ? "1wk" : "1mo";
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(data.ticker)}?range=${data.range}&interval=${interval}`,
+        { headers: { "User-Agent": "Mozilla/5.0" } },
+      );
+      if (!res.ok) return { points: [] as Array<{ t: number; price: number }>, currency: "USD" };
+      const j = await res.json();
+      const r = j?.chart?.result?.[0];
+      const ts: number[] = r?.timestamp ?? [];
+      const closes: Array<number | null> = r?.indicators?.quote?.[0]?.close ?? [];
+      const points = ts
+        .map((t, i) => ({ t: t * 1000, price: closes[i] as number }))
+        .filter((p) => typeof p.price === "number" && !isNaN(p.price));
+      return { points, currency: r?.meta?.currency ?? "USD" };
+    } catch {
+      return { points: [] as Array<{ t: number; price: number }>, currency: "USD" };
+    }
+  });
+
 // ── Stock auto-fundamentals (used to prefill EPS/revenue/sector) ────────────
 export const fetchStockFundamentals = createServerFn({ method: "POST" })
   .inputValidator((input: { ticker: string }) => ({ ticker: String(input.ticker).toUpperCase().slice(0, 10) }))
