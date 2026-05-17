@@ -63,22 +63,22 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.22 0.022 270);
-  --foreground: oklch(0.985 0.005 250);
-  --brand: oklch(0.74 0.17 295);
-  --brand-2: oklch(0.72 0.15 250);
-  --gradient-brand: linear-gradient(135deg, oklch(0.74 0.17 295), oklch(0.72 0.15 250));
-  --surface: oklch(0.28 0.025 270);
-  --surface-2: oklch(0.33 0.028 270);
+  --background: oklch(0.19 0.025 30);
+  --foreground: oklch(0.985 0.005 60);
+  --brand: oklch(0.72 0.2 40);
+  --brand-2: oklch(0.68 0.22 25);
+  --gradient-brand: linear-gradient(135deg, oklch(0.78 0.19 65), oklch(0.68 0.22 25));
+  --surface: oklch(0.25 0.03 35);
+  --surface-2: oklch(0.3 0.035 35);
   --success: oklch(0.76 0.16 150);
-  --danger: oklch(0.7 0.2 25);
-  --warning: oklch(0.82 0.15 75);
-  --shadow-elegant: 0 10px 40px -10px oklch(0.08 0.04 270 / 0.5);
-  --card: oklch(0.28 0.025 270);
-  --card-foreground: oklch(0.985 0.005 250);
-  --popover: oklch(0.28 0.025 270);
-  --popover-foreground: oklch(0.985 0.005 250);
-  --primary: oklch(0.74 0.17 295);
+  --danger: oklch(0.65 0.23 18);
+  --warning: oklch(0.82 0.17 75);
+  --shadow-elegant: 0 10px 40px -10px oklch(0.1 0.08 30 / 0.6);
+  --card: oklch(0.25 0.03 35);
+  --card-foreground: oklch(0.985 0.005 60);
+  --popover: oklch(0.25 0.03 35);
+  --popover-foreground: oklch(0.985 0.005 60);
+  --primary: oklch(0.72 0.2 40);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.3 0.025 270);
   --secondary-foreground: oklch(0.985 0.005 250);
@@ -90,7 +90,7 @@
   --destructive-foreground: oklch(0.99 0 0);
   --border: oklch(1 0 0 / 0.1);
   --input: oklch(1 0 0 / 0.14);
-  --ring: oklch(0.74 0.17 295);
+  --ring: oklch(0.72 0.2 40);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -148,8 +148,8 @@
 
   body {
     background:
-      radial-gradient(ellipse 80% 50% at 20% 0%, oklch(0.74 0.17 295 / 0.12), transparent 60%),
-      radial-gradient(ellipse 70% 50% at 80% 10%, oklch(0.72 0.15 250 / 0.1), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 20% 0%, oklch(0.72 0.2 40 / 0.18), transparent 60%),
+      radial-gradient(ellipse 70% 50% at 80% 10%, oklch(0.68 0.22 25 / 0.14), transparent 60%),
       var(--color-background);
     color: var(--color-foreground);
     min-height: 100vh;
@@ -157,9 +157,31 @@
 
   @media (max-width: 640px) {
     :root {
-      --background: oklch(0.27 0.022 270);
-      --surface: oklch(0.33 0.025 270);
-      --card: oklch(0.33 0.025 270);
+      --background: oklch(0.24 0.025 30);
+      --surface: oklch(0.3 0.03 35);
+      --card: oklch(0.3 0.03 35);
     }
   }
 }
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: ticker-scroll 60s linear infinite;
+  will-change: transform;
+}
+.ticker-pause:hover .ticker-track { animation-play-state: paused; }
+
+@keyframes flame-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px oklch(0.72 0.2 40 / 0.5)); }
+  50% { filter: drop-shadow(0 0 14px oklch(0.78 0.22 50 / 0.8)); }
+}
+.flame-icon { animation: flame-pulse 2.4s ease-in-out infinite; }
+
+@keyframes price-bar {
+  0% { width: 0%; }
+  100% { width: var(--bar-w, 50%); }
+}
+.price-bar-fill { animation: price-bar 1.2s ease-out forwards; }
