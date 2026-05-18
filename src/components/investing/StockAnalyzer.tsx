@@ -22,6 +22,7 @@ export function StockAnalyzer() {
   const [revenue, setRevenue] = useState("");
   const [sector, setSector] = useState("Technology");
   const [autofilling, setAutofilling] = useState(false);
+  const [dataSource, setDataSource] = useState<"yahoo" | "ai" | null>(null);
 
   const fetchQuote = useServerFn(fetchStockQuote);
   const fetchFundamentals = useServerFn(fetchStockFundamentals);
@@ -29,6 +30,7 @@ export function StockAnalyzer() {
 
   useEffect(() => {
     if (!ticker || ticker.length < 1) return;
+    setDataSource(null);
     const t = setTimeout(async () => {
       setAutofilling(true);
       try {
@@ -42,6 +44,7 @@ export function StockAnalyzer() {
         if (fund?.revenue_billions) setRevenue(String(fund.revenue_billions));
         if (fund?.sector && SECTORS.includes(fund.sector)) setSector(fund.sector);
         if (fund?.company_name && !quote?.name) setCompanyName(fund.company_name);
+        if (fund?.source) setDataSource(fund.source);
       } finally {
         setAutofilling(false);
       }
