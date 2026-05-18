@@ -22,6 +22,7 @@ export function StockAnalyzer() {
   const [revenue, setRevenue] = useState("");
   const [sector, setSector] = useState("Technology");
   const [autofilling, setAutofilling] = useState(false);
+  const [dataSource, setDataSource] = useState<"yahoo" | "ai" | null>(null);
 
   const fetchQuote = useServerFn(fetchStockQuote);
   const fetchFundamentals = useServerFn(fetchStockFundamentals);
@@ -29,6 +30,7 @@ export function StockAnalyzer() {
 
   useEffect(() => {
     if (!ticker || ticker.length < 1) return;
+    setDataSource(null);
     const t = setTimeout(async () => {
       setAutofilling(true);
       try {
@@ -42,6 +44,7 @@ export function StockAnalyzer() {
         if (fund?.revenue_billions) setRevenue(String(fund.revenue_billions));
         if (fund?.sector && SECTORS.includes(fund.sector)) setSector(fund.sector);
         if (fund?.company_name && !quote?.name) setCompanyName(fund.company_name);
+        if (fund?.source) setDataSource(fund.source);
       } finally {
         setAutofilling(false);
       }
@@ -92,7 +95,13 @@ export function StockAnalyzer() {
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
               className="mt-1.5 text-lg font-semibold bg-background/50"
             />
-            {companyName && <p className="text-xs text-muted-foreground mt-1">{companyName}</p>}
+            {companyName && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                {companyName}
+                {dataSource === "yahoo" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.72_0.17_150_/_0.15)] text-[var(--success)] border border-[oklch(0.72_0.17_150_/_0.3)]">● Live data</span>}
+                {dataSource === "ai" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.78_0.16_75_/_0.15)] text-[var(--warning)] border border-[oklch(0.78_0.16_75_/_0.3)]">AI estimate · verify</span>}
+              </p>
+            )}
           </div>
           <Field label="Price ($)" value={price} onChange={setPrice} type="number" placeholder="185" />
           <Field label="EPS (TTM)" value={eps} onChange={setEps} type="number" placeholder="6.43" />

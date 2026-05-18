@@ -142,18 +142,185 @@ export const fetchStockHistory = createServerFn({ method: "POST" })
     }
   });
 
-// ── Stock auto-fundamentals (used to prefill EPS/revenue/sector) ────────────
+// ── Map Yahoo sector → our simplified list ──────────────────────────────────
+const SECTOR_MAP: Record<string, string> = {
+  "Technology": "Technology",
+  "Healthcare": "Healthcare",
+  "Financial Services": "Finance",
+  "Financial": "Finance",
+  "Consumer Cyclical": "Consumer",
+  "Consumer Defensive": "Consumer",
+  "Consumer Staples": "Consumer",
+  "Consumer Discretionary": "Consumer",
+  "Energy": "Energy",
+  "Industrials": "Industrials",
+  "Real Estate": "Real Estate",
+  "Utilities": "Utilities",
+  "Basic Materials": "Materials",
+  "Materials": "Materials",
+  "Communication Services": "Communication",
+};
+
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
+
+async function yahooQuoteSummary(ticker: string) {
+  const modules = "summaryProfile,financialData,defaultKeyStatistics,price,assetProfile";
+  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+  for (const host of hosts) {
+    try {
+      const res = await fetch(
+        `https://${host}/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`,
+        { headers: { "User-Agent": UA, "Accept": "application/json" } },
+      );
+      if (!res.ok) continue;
+      const j = await res.json();
+      const r = j?.quoteSummary?.result?.[0];
+      if (r) return r;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+// ── Stock auto-fundamentals — REAL data from Yahoo, AI only as last resort ──
 export const fetchStockFundamentals = createServerFn({ method: "POST" })
   .inputValidator((input: { ticker: string }) => ({ ticker: String(input.ticker).toUpperCase().slice(0, 10) }))
   .handler(async ({ data }) => {
+    const r = await yahooQuoteSummary(data.ticker);
+    if (r) {
+      const eps = r?.defaultKeyStatistics?.trailingEps?.raw ?? r?.financialData?.trailingEps?.raw ?? null;
+      const revenue = r?.financialData?.totalRevenue?.raw ?? null;
+      const sectorRaw = r?.summaryProfile?.sector ?? r?.assetProfile?.sector ?? null;
+      const name = r?.price?.longName ?? r?.price?.shortName ?? null;
+      const sector = sectorRaw ? (SECTOR_MAP[sectorRaw] ?? "Technology") : null;
+      // If we got at least EPS or revenue, trust Yahoo and return.
+      if (eps != null || revenue != null) {
+        return {
+          eps: eps ?? 0,
+          revenue_billions: revenue ? Number((revenue / 1e9).toFixed(2)) : 0,
+          sector: sector ?? "Technology",
+          company_name: name ?? data.ticker,
+          source: "yahoo" as const,
+        };
+      }
+    }
+    // Fallback to AI estimate (clearly marked).
     const raw = await callAI({
       system: "You are a financial data assistant. Respond ONLY with valid JSON, no prose.",
-      user: `For the publicly-traded stock ${data.ticker}, provide your best estimate of trailing-twelve-month financial fundamentals.
-Return JSON with this exact shape:
-{"eps": number, "revenue_billions": number, "sector": "Technology"|"Healthcare"|"Finance"|"Consumer"|"Energy"|"Industrials"|"Real Estate"|"Utilities"|"Materials"|"Communication", "company_name": string}`,
+      user: `For ${data.ticker}, provide trailing-twelve-month fundamentals as best you know. If you are not confident, return 0.
+JSON shape: {"eps": number, "revenue_billions": number, "sector": "Technology"|"Healthcare"|"Finance"|"Consumer"|"Energy"|"Industrials"|"Real Estate"|"Utilities"|"Materials"|"Communication", "company_name": string}`,
       json: true,
     });
-    return parseJSON<{ eps: number; revenue_billions: number; sector: string; company_name: string }>(raw);
+    const parsed = parseJSON<{ eps: number; revenue_billions: number; sector: string; company_name: string }>(raw);
+    return { ...parsed, source: "ai" as const };
+  });
+
+// ── Stock Scanner: live quote stats + AI sentiment on a specific ticker ─────
+export type StockScannerResult = {
+  ticker: string;
+  company_name: string;
+  price: number | null;
+  change_pct: number | null;
+  currency: string;
+  day_low: number | null;
+  day_high: number | null;
+  week52_low: number | null;
+  week52_high: number | null;
+  volume: number | null;
+  market_cap: number | null;
+  sentiment: string;
+  score: number;
+  headline: string;
+  narrative: string;
+  positives: Array<{ point: string; impact: string }>;
+  negatives: Array<{ point: string; impact: string }>;
+  what_it_means: string;
+  watch_for: string[];
+  glossary: { term: string; definition: string };
+};
+
+export const scanStock = createServerFn({ method: "POST" })
+  .inputValidator((input: { ticker: string }) => {
+    const t = String(input?.ticker ?? "").trim().toUpperCase().slice(0, 10);
+    if (!t) throw new Error("Ticker required");
+    return { ticker: t };
+  })
+  .handler(async ({ data }) => {
+    // 1) Live quote from Yahoo chart meta
+    let price: number | null = null, change_pct: number | null = null, currency = "USD";
+    let day_low: number | null = null, day_high: number | null = null;
+    let week52_low: number | null = null, week52_high: number | null = null;
+    let volume: number | null = null, name: string | null = null;
+    try {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(data.ticker)}?range=1d&interval=1m`,
+        { headers: { "User-Agent": UA } },
+      );
+      if (res.ok) {
+        const j = await res.json();
+        const meta = j?.chart?.result?.[0]?.meta;
+        if (meta) {
+          price = meta.regularMarketPrice ?? null;
+          const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
+          change_pct = price && prev ? Number((((price - prev) / prev) * 100).toFixed(2)) : null;
+          currency = meta.currency ?? "USD";
+          day_low = meta.regularMarketDayLow ?? null;
+          day_high = meta.regularMarketDayHigh ?? null;
+          week52_low = meta.fiftyTwoWeekLow ?? null;
+          week52_high = meta.fiftyTwoWeekHigh ?? null;
+          volume = meta.regularMarketVolume ?? null;
+          name = meta.longName ?? meta.shortName ?? null;
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 2) Market cap + company name from quoteSummary if available
+    let market_cap: number | null = null;
+    const r = await yahooQuoteSummary(data.ticker);
+    if (r) {
+      market_cap = r?.price?.marketCap?.raw ?? null;
+      name = name ?? r?.price?.longName ?? r?.price?.shortName ?? null;
+    }
+
+    // 3) AI sentiment grounded in the real numbers
+    const context = `Ticker: ${data.ticker}${name ? ` (${name})` : ""}
+Live price: ${price ?? "unknown"} ${currency}
+1-day change: ${change_pct != null ? change_pct + "%" : "unknown"}
+52-week range: ${week52_low ?? "?"} – ${week52_high ?? "?"}
+Market cap: ${market_cap ? (market_cap / 1e9).toFixed(1) + "B" : "unknown"}`;
+
+    const raw = await callAI({
+      system:
+        "You are a market sentiment analyst with deep knowledge of recent earnings, guidance, product cycles, and macro themes. Be SPECIFIC to this exact ticker — never generic. Reference the live price context. Respond ONLY with valid JSON.",
+      user: `Provide a sentiment snapshot for the stock below using your knowledge of its recent business performance.
+${context}
+
+Return JSON:
+{
+  "sentiment": "Bullish"|"Bearish"|"Mixed"|"Neutral",
+  "score": integer -100..100,
+  "headline": "A realistic representative headline specific to ${data.ticker} right now",
+  "narrative": "2-3 sentences on the dominant market narrative for this stock",
+  "positives": [{"point":"specific positive driver","impact":"High|Medium|Low"}, {"point":"...","impact":"..."}, {"point":"...","impact":"..."}],
+  "negatives": [{"point":"specific concern","impact":"High|Medium|Low"}, {"point":"...","impact":"..."}, {"point":"...","impact":"..."}],
+  "what_it_means": "2 sentences for a retail investor",
+  "watch_for": ["upcoming catalyst 1", "upcoming catalyst 2"],
+  "glossary": {"term":"relevant investing term","definition":"plain-English definition"}
+}`,
+      json: true,
+    });
+    const ai = parseJSON<Omit<StockScannerResult,
+      "ticker"|"company_name"|"price"|"change_pct"|"currency"|"day_low"|"day_high"|"week52_low"|"week52_high"|"volume"|"market_cap">>(raw);
+
+    return {
+      ticker: data.ticker,
+      company_name: name ?? data.ticker,
+      price, change_pct, currency,
+      day_low, day_high, week52_low, week52_high,
+      volume, market_cap,
+      ...ai,
+    } satisfies StockScannerResult;
   });
 
 // ── Deep stock analysis ─────────────────────────────────────────────────────

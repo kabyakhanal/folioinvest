@@ -1,17 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { BarChart3, Briefcase, Newspaper, Sparkles } from "lucide-react";
+import { BarChart3, Briefcase, Radar, Sparkles } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { StockAnalyzer } from "@/components/investing/StockAnalyzer";
 import { PortfolioTracker } from "@/components/investing/PortfolioTracker";
-import { NewsSentimentScanner } from "@/components/investing/NewsSentiment";
+import { StockScanner } from "@/components/investing/StockScanner";
 
 export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
       { title: "Folio — AI Investing Toolkit" },
-      { name: "description", content: "Professional AI-powered tools for retail investors: deep stock analysis, portfolio insights, and live market sentiment." },
+      { name: "description", content: "Professional AI-powered tools for retail investors: deep stock analysis, portfolio insights, and live stock scanner." },
     ],
   }),
 });
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
 const TABS = [
   { id: "analyzer", label: "Stock Analyzer", icon: BarChart3, Component: StockAnalyzer },
   { id: "portfolio", label: "Portfolio", icon: Briefcase, Component: PortfolioTracker },
-  { id: "news", label: "News Sentiment", icon: Newspaper, Component: NewsSentimentScanner },
+  { id: "scanner", label: "Stock Scanner", icon: Radar, Component: StockScanner },
 ] as const;
 
 function Index() {
