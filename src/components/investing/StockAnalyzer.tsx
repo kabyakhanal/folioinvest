@@ -7,48 +7,54 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { analyzeStock, fetchStockFundamentals, fetchStockQuote, type StockAnalysis } from "@/lib/ai.functions";
 import { PriceHistoryChart } from "./PriceHistoryChart";
 import { toast } from "sonner";
 
-const SECTORS = ["Technology", "Healthcare", "Finance", "Consumer", "Energy", "Industrials", "Real Estate", "Utilities", "Materials", "Communication"];
+type Fundamentals = {
+  price: number | null;
+  eps: number | null;
+  revenue_billions: number | null;
+  sector: string | null;
+  company_name: string | null;
+  source: "yahoo" | "ai" | null;
+};
 
 export function StockAnalyzer() {
   const [ticker, setTicker] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [price, setPrice] = useState("");
-  const [eps, setEps] = useState("");
-  const [revenue, setRevenue] = useState("");
-  const [sector, setSector] = useState("Technology");
+  const [fund, setFund] = useState<Fundamentals>({
+    price: null, eps: null, revenue_billions: null, sector: null, company_name: null, source: null,
+  });
   const [autofilling, setAutofilling] = useState(false);
-  const [dataSource, setDataSource] = useState<"yahoo" | "ai" | null>(null);
 
   const fetchQuote = useServerFn(fetchStockQuote);
   const fetchFundamentals = useServerFn(fetchStockFundamentals);
   const analyze = useServerFn(analyzeStock);
 
   useEffect(() => {
-    if (!ticker || ticker.length < 1) return;
-    setDataSource(null);
+    if (!ticker || ticker.length < 1) {
+      setFund({ price: null, eps: null, revenue_billions: null, sector: null, company_name: null, source: null });
+      return;
+    }
     const t = setTimeout(async () => {
       setAutofilling(true);
       try {
-        const [quote, fund] = await Promise.all([
+        const [quote, f] = await Promise.all([
           fetchQuote({ data: { ticker } }).catch(() => null),
           fetchFundamentals({ data: { ticker } }).catch(() => null),
         ]);
-        if (quote?.price) setPrice(String(quote.price));
-        if (quote?.name) setCompanyName(quote.name);
-        if (fund?.eps) setEps(String(fund.eps));
-        if (fund?.revenue_billions) setRevenue(String(fund.revenue_billions));
-        if (fund?.sector && SECTORS.includes(fund.sector)) setSector(fund.sector);
-        if (fund?.company_name && !quote?.name) setCompanyName(fund.company_name);
-        if (fund?.source) setDataSource(fund.source);
+        setFund({
+          price: quote?.price ?? null,
+          eps: f?.eps ?? null,
+          revenue_billions: f?.revenue_billions ?? null,
+          sector: f?.sector ?? null,
+          company_name: quote?.name ?? f?.company_name ?? null,
+          source: f?.source ?? null,
+        });
       } finally {
         setAutofilling(false);
       }
-    }, 700);
+    }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
@@ -60,16 +66,14 @@ export function StockAnalyzer() {
   });
 
   const onAnalyze = () => {
-    if (!ticker || !price) {
-      toast.error("Ticker and price are required");
-      return;
-    }
+    if (!ticker) return toast.error("Enter a ticker");
+    if (!fund.price) return toast.error("Could not fetch live price for this ticker");
     mutation.mutate({
       ticker,
-      price: parseFloat(price),
-      eps: eps ? parseFloat(eps) : undefined,
-      revenue: revenue ? parseFloat(revenue) : undefined,
-      sector,
+      price: fund.price,
+      eps: fund.eps ?? undefined,
+      revenue: fund.revenue_billions ?? undefined,
+      sector: fund.sector ?? undefined,
     });
   };
 
@@ -84,37 +88,33 @@ export function StockAnalyzer() {
   return (
     <div className="space-y-5">
       <Card className="p-5 bg-[var(--surface)] border-border/40">
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-              Ticker {autofilling && <Loader2 className="h-3 w-3 animate-spin" />}
-            </Label>
-            <Input
-              placeholder="AAPL, MSFT, NVDA…"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              className="mt-1.5 text-lg font-semibold bg-background/50"
-            />
-            {companyName && (
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                {companyName}
-                {dataSource === "yahoo" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.72_0.17_150_/_0.15)] text-[var(--success)] border border-[oklch(0.72_0.17_150_/_0.3)]">● Live data</span>}
-                {dataSource === "ai" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.78_0.16_75_/_0.15)] text-[var(--warning)] border border-[oklch(0.78_0.16_75_/_0.3)]">AI estimate · verify</span>}
-              </p>
-            )}
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          Ticker {autofilling && <Loader2 className="h-3 w-3 animate-spin" />}
+        </Label>
+        <Input
+          placeholder="AAPL, MSFT, NVDA…"
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          className="mt-1.5 text-lg font-semibold bg-background/50"
+        />
+        {fund.company_name && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
+            {fund.company_name}
+            {fund.source === "yahoo" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.72_0.17_150_/_0.15)] text-[var(--success)] border border-[oklch(0.72_0.17_150_/_0.3)]">● Live data</span>}
+            {fund.source === "ai" && <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[oklch(0.78_0.16_75_/_0.15)] text-[var(--warning)] border border-[oklch(0.78_0.16_75_/_0.3)]">AI estimate · verify</span>}
+          </p>
+        )}
+
+        {(fund.price != null || fund.eps != null || fund.revenue_billions != null || fund.sector) && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+            <Stat label="Price" value={fund.price != null ? `$${fund.price.toFixed(2)}` : "—"} />
+            <Stat label="EPS (TTM)" value={fund.eps ? fund.eps.toFixed(2) : "—"} />
+            <Stat label="Revenue" value={fund.revenue_billions ? `$${fund.revenue_billions}B` : "—"} />
+            <Stat label="Sector" value={fund.sector ?? "—"} />
           </div>
-          <Field label="Price ($)" value={price} onChange={setPrice} type="number" placeholder="185" />
-          <Field label="EPS (TTM)" value={eps} onChange={setEps} type="number" placeholder="6.43" />
-          <Field label="Revenue ($B)" value={revenue} onChange={setRevenue} type="number" placeholder="394" />
-          <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Sector</Label>
-            <Select value={sector} onValueChange={setSector}>
-              <SelectTrigger className="mt-1.5 bg-background/50"><SelectValue /></SelectTrigger>
-              <SelectContent>{SECTORS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-        <Button onClick={onAnalyze} disabled={mutation.isPending || !ticker || !price} variant="brand" className="w-full mt-5">
+        )}
+
+        <Button onClick={onAnalyze} disabled={mutation.isPending || !ticker || !fund.price || autofilling} variant="brand" className="w-full mt-5">
           {mutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running deep analysis…</> : <><Sparkles className="h-4 w-4 mr-2" />Analyze Stock</>}
         </Button>
       </Card>
@@ -124,7 +124,7 @@ export function StockAnalyzer() {
           <Card className="p-5 bg-[var(--surface)] border-border/40">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <h3 className="text-2xl font-bold">{ticker}</h3>
                   <Badge className={`${vMeta.bg} ${vMeta.color} border-0`}>
                     <vMeta.icon className="h-3 w-3 mr-1" />{result.verdict}
@@ -209,11 +209,11 @@ export function StockAnalyzer() {
   );
 }
 
-function Field({ label, value, onChange, type = "text", placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <Label className="text-xs uppercase tracking-wider text-muted-foreground">{label}</Label>
-      <Input className="mt-1.5 bg-background/50" type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+    <div className="rounded-md border border-border/40 bg-background/40 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold mt-0.5 truncate">{value}</p>
     </div>
   );
 }
