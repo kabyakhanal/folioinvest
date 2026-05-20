@@ -164,7 +164,7 @@ const SECTOR_MAP: Record<string, string> = {
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
 async function yahooQuoteSummary(ticker: string) {
-  const modules = "summaryProfile,financialData,defaultKeyStatistics,price,assetProfile";
+  const modules = "summaryProfile,assetProfile,financialData,defaultKeyStatistics,price,summaryDetail,incomeStatementHistory,earnings";
   const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
   for (const host of hosts) {
     try {
@@ -189,13 +189,20 @@ export const fetchStockFundamentals = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const r = await yahooQuoteSummary(data.ticker);
     if (r) {
-      const eps = r?.defaultKeyStatistics?.trailingEps?.raw ?? r?.financialData?.trailingEps?.raw ?? null;
-      const revenue = r?.financialData?.totalRevenue?.raw ?? null;
-      const sectorRaw = r?.summaryProfile?.sector ?? r?.assetProfile?.sector ?? null;
+      const eps =
+        r?.defaultKeyStatistics?.trailingEps?.raw ??
+        r?.financialData?.trailingEps?.raw ??
+        r?.summaryDetail?.trailingEps?.raw ??
+        null;
+      // Prefer TTM revenue from financialData, fall back to latest annual income statement
+      const ttmRevenue = r?.financialData?.totalRevenue?.raw ?? null;
+      const annualRevenue = r?.incomeStatementHistory?.incomeStatementHistory?.[0]?.totalRevenue?.raw ?? null;
+      const earningsRevenue = r?.earnings?.financialsChart?.yearly?.slice(-1)?.[0]?.revenue?.raw ?? null;
+      const revenue = ttmRevenue ?? annualRevenue ?? earningsRevenue ?? null;
+      const sectorRaw = r?.assetProfile?.sector ?? r?.summaryProfile?.sector ?? null;
       const name = r?.price?.longName ?? r?.price?.shortName ?? null;
-      const sector = sectorRaw ? (SECTOR_MAP[sectorRaw] ?? "Technology") : null;
-      // If we got at least EPS or revenue, trust Yahoo and return.
-      if (eps != null || revenue != null) {
+      const sector = sectorRaw ? (SECTOR_MAP[sectorRaw] ?? sectorRaw) : null;
+      if (eps != null || revenue != null || sector != null) {
         return {
           eps: eps ?? 0,
           revenue_billions: revenue ? Number((revenue / 1e9).toFixed(2)) : 0,
