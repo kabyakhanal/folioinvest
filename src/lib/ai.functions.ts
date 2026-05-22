@@ -448,3 +448,142 @@ Return JSON:
     });
     return parseJSON<NewsSentimentResult>(raw);
   });
+
+// ── Stock Researcher: Google-like deep research for stocks ──────────────────
+const TICKER_RE = /\b[A-Z]{1,5}(?:\.[A-Z]{1,2})?\b/g;
+const STOPWORDS = new Set([
+  "I","A","AN","THE","AND","OR","VS","VERSUS","IS","IT","TO","OF","ON","IN","FOR","AT","BY","AS",
+  "WHY","WHAT","HOW","WHEN","WHERE","WHO","SHOULD","COULD","WOULD","DO","DOES","DID","BE","ARE","WAS","WERE",
+  "BUY","SELL","HOLD","STOCK","STOCKS","SHARE","SHARES","COMPARE","BETTER","WORSE","GOOD","BAD",
+  "US","USA","UK","EU","CEO","CFO","ETF","IPO","AI","API",
+]);
+
+async function enrichTicker(t: string) {
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`,
+      { headers: { "User-Agent": UA } },
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const meta = j?.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) return null;
+    const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
+    const closes: number[] = (j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter(
+      (x: number | null) => typeof x === "number",
+    );
+    const yearAgo = closes.length ? closes[0] : null;
+    const ytdPct =
+      yearAgo && meta.regularMarketPrice
+        ? Number((((meta.regularMarketPrice - yearAgo) / yearAgo) * 100).toFixed(1))
+        : null;
+    return {
+      ticker: t,
+      name: meta.longName ?? meta.shortName ?? t,
+      price: meta.regularMarketPrice,
+      currency: meta.currency ?? "USD",
+      change_pct:
+        prev && meta.regularMarketPrice
+          ? Number((((meta.regularMarketPrice - prev) / prev) * 100).toFixed(2))
+          : null,
+      week52_low: meta.fiftyTwoWeekLow ?? null,
+      week52_high: meta.fiftyTwoWeekHigh ?? null,
+      one_year_pct: ytdPct,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type ResearchEnriched = {
+  ticker: string;
+  name: string;
+  price: number;
+  currency: string;
+  change_pct: number | null;
+  week52_low: number | null;
+  week52_high: number | null;
+  one_year_pct: number | null;
+};
+
+export const researchStocks = createServerFn({ method: "POST" })
+  .inputValidator((input: { query: string }) => {
+    const q = String(input?.query ?? "").trim().slice(0, 400);
+    if (!q) throw new Error("Query required");
+    return { query: q };
+  })
+  .handler(async ({ data }) => {
+    // 1) Extract candidate tickers from the query
+    const upper = data.query.toUpperCase();
+    const candidates = Array.from(new Set(upper.match(TICKER_RE) ?? []))
+      .filter((t) => !STOPWORDS.has(t))
+      .slice(0, 5);
+
+    // 2) Enrich via Yahoo in parallel — only keep ones that resolve
+    const enriched = (await Promise.all(candidates.map(enrichTicker))).filter(
+      (x): x is ResearchEnriched => x !== null,
+    );
+
+    // 3) Build grounded context
+    const liveContext = enriched.length
+      ? enriched
+          .map(
+            (e) =>
+              `- ${e.ticker} (${e.name}): ${e.price} ${e.currency}, 1d ${
+                e.change_pct ?? "?"
+              }%, 1y ${e.one_year_pct ?? "?"}%, 52w ${e.week52_low ?? "?"}–${e.week52_high ?? "?"}`,
+          )
+          .join("\n")
+      : "(no live quote data resolved for the mentioned tickers)";
+
+    const isCompare = enriched.length >= 2 || /\b(vs|versus|compare|or)\b/i.test(data.query);
+
+    const system = `You are a senior equity research analyst writing for an educated retail investor.
+Be SPECIFIC and CONCRETE — never generic. Use real knowledge of companies, products, recent earnings, guidance, competitive position, and macro themes. Balance bull and bear views. Cite numbers when relevant. Do NOT give financial advice; frame as research and education.
+Output well-structured GitHub-Flavored Markdown with clear headings (##), bullet lists, and (when comparing) a markdown table. Do not wrap output in code fences. No preamble — start with the title.`;
+
+    const user = isCompare
+      ? `Research request: "${data.query}"
+
+Live market data for mentioned tickers:
+${liveContext}
+
+Write a thorough COMPARATIVE research note. Structure:
+# <Concise title>
+## Snapshot
+A 2–3 sentence overview of what's being compared and why it matters now.
+## Side-by-side comparison
+A markdown table comparing the companies across: Business model, Revenue scale & growth, Profitability, Valuation (P/E, P/S where relevant), Competitive moat, Key risks, 1-year stock performance.
+## Bull case — each company
+A short paragraph per company.
+## Bear case — each company
+A short paragraph per company.
+## Catalysts to watch
+Bulleted, specific upcoming events (earnings, product launches, regulatory).
+## Verdict
+A balanced 3–4 sentence conclusion noting which type of investor each one suits. End with a one-line educational disclaimer.`
+      : `Research request: "${data.query}"
+
+Live market data for mentioned tickers:
+${liveContext}
+
+Write a thorough research note. Structure:
+# <Concise title>
+## Snapshot
+2–3 sentences answering the question directly.
+## Business overview
+What the company/topic actually does, in plain English.
+## Key numbers
+Bulleted recent metrics (revenue, growth, margins, valuation) — use the live data above where applicable.
+## Bull case
+2–3 specific reasons to be optimistic.
+## Bear case
+2–3 specific risks or concerns.
+## Catalysts to watch
+Bulleted upcoming events that could move the stock/topic.
+## Bottom line
+3–4 sentence balanced takeaway. End with a one-line educational disclaimer.`;
+
+    const markdown = await callAI({ system, user });
+    return { markdown, enriched, isCompare };
+  });
