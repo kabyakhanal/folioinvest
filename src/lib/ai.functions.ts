@@ -587,3 +587,63 @@ Bulleted upcoming events that could move the stock/topic.
     const markdown = await callAI({ system, user });
     return { markdown, enriched, isCompare };
   });
+
+export const followUpResearch = createServerFn({ method: "POST" })
+  .inputValidator((input: {
+    originalQuery: string;
+    priorTurns: Array<{ question: string; answer: string }>;
+    followUp: string;
+    tickers?: string[];
+  }) => ({
+    originalQuery: String(input?.originalQuery ?? "").slice(0, 400),
+    priorTurns: Array.isArray(input?.priorTurns) ? input.priorTurns.slice(-6) : [],
+    followUp: String(input?.followUp ?? "").trim().slice(0, 400),
+    tickers: Array.isArray(input?.tickers) ? input.tickers.slice(0, 5) : [],
+  }))
+  .handler(async ({ data }) => {
+    if (!data.followUp) throw new Error("Follow-up question required");
+
+    // Re-extract any new tickers in the follow-up, merge with prior
+    const fuTickers = Array.from(
+      new Set((data.followUp.toUpperCase().match(TICKER_RE) ?? []).filter((t) => !STOPWORDS.has(t))),
+    );
+    const allTickers = Array.from(new Set([...data.tickers, ...fuTickers])).slice(0, 5);
+    const enriched = (await Promise.all(allTickers.map(enrichTicker))).filter(
+      (x): x is ResearchEnriched => x !== null,
+    );
+
+    const liveContext = enriched.length
+      ? enriched
+          .map(
+            (e) =>
+              `- ${e.ticker} (${e.name}): ${e.price} ${e.currency}, 1d ${
+                e.change_pct ?? "?"
+              }%, 1y ${e.one_year_pct ?? "?"}%, 52w ${e.week52_low ?? "?"}–${e.week52_high ?? "?"}`,
+          )
+          .join("\n")
+      : "(no live quote data available)";
+
+    const history = data.priorTurns
+      .map((t, i) => `### Turn ${i + 1}\nQ: ${t.question}\nA: ${t.answer}`)
+      .join("\n\n");
+
+    const system = `You are a senior equity research analyst continuing a research conversation with an educated retail investor.
+Be SPECIFIC and CONCRETE. Build on the prior research below — do NOT repeat it. Answer ONLY the follow-up question, but stay grounded in the same companies/topic and the live market data.
+Output GitHub-Flavored Markdown. Use ## headings only when the answer is long enough to warrant sections. Keep tone conversational but rigorous. Do not wrap output in code fences. Do not give financial advice; this is education.`;
+
+    const user = `Original research request: "${data.originalQuery}"
+
+Prior conversation:
+${history || "(none)"}
+
+Current live market data:
+${liveContext}
+
+Follow-up question:
+${data.followUp}
+
+Answer the follow-up directly and thoroughly, referencing specifics (numbers, products, competitors, catalysts) where relevant.`;
+
+    const markdown = await callAI({ system, user });
+    return { markdown, enriched };
+  });
